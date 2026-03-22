@@ -1,0 +1,8 @@
+# Notes
+
+This file is intended for storing notes.
+
+## Usage
+- Write down any important information you want to remember.
+- Use bullet points for lists.
+- Organize by date or topic as needed.
