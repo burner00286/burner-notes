@@ -1,0 +1,84 @@
+reiqa -- representation learning for image quality assesment 
+
+problem : how to assign an cleanliness score or a quality score if we dont have the origianl image 
+
+reiqa approach--> it has two separate components ,
+the first one is the content aware which gauges what is in the image ,
+and the second one is quality which gauges how bad or how good the image is. 
+So the architecture has exactly two encoders — one trained to capture content,
+and one trained to capture quality/distortion. 
+They are trained completely separately with different objectives, 
+and only combined at the very end when you want a final score.
+
+
+CONTENT AWARE 
+this uses the MoCo-v2 which is a well established self supervised learning framework 
+The idea is: take an image, create two randomly augmented versions of it (different crops, colour jitters, flips),
+and train the network so that both versions end up with similar embeddings.
+Since both versions come from the same image, they should represent the same content
+Crucially, the augmentations used here are all content-preserving — cropping and colour shifting don't change what the image is about. 
+This encoder therefore learns to recognise scenes, objects, and textures, completely ignoring distortion.
+It is trained on ImageNet and other large clean image datasets.
+
+
+QUALITY AWARE 
+instead of augmenting images to look content different but quality similar ( like in content aware) 
+they deliberately augment images to look quality differnt , i.e, it tkae the same image and applies differnt sorts of noises at varying levels 
+Two images that come from the same clean source but have different distortions applied should end up with different embeddings. 
+Two images with similar distortion levels, even if their content is completely different, should end up with similar embeddings.
+this model learns that a photo of a dog in fog is the same as that of a photo of a mountain in fog(with the same fog noise) 
+
+Now this is where the ARNIQA comes in by introducing DISTORTION MANIFOLD 
+ARNIQA trains the network to be aware of these manifold structures, 
+making the quality embeddings much more geometrically organised and meaningful.
+distortion manifold — the idea that in this embedding space, 
+there is a smooth geometric path from a clean image to a heavily degraded version of it, 
+and that path is specific to the distortion type.
+The manifold for Gaussian noise looks different from the manifold for blur. 
+
+FINAL STAGE --> combining ( training the linear regressor ) 
+
+After both encoders are trained separately, Re-IQA enters its final stage — training a linear regressor. The process is simple: take any image, pass it through both encoders, get two embedding vectors, concatenate them into one long vector, and feed that into a Ridge regression model (or ElasticNet) that has been trained on a small dataset of human quality scores. This regressor learns which directions in the combined embedding space correspond to high or low quality as judged by humans. Because the quality encoder already organised the space by distortion, and the content encoder organised it by scene type, the combined vector gives the regressor enough information to make nuanced predictions — it can learn things like "blur is more annoying in portrait photos than in landscape photos" because the content dimensions and quality dimensions are both present.
+Why this works so well without labels
+The elegant thing about this design is that the hard work — learning what distortion looks like, learning what scenes look like — is done entirely without human labels, using vast amounts of unlabelled data. The labelled data is only used in the final regressor step, and because the embeddings are already so rich and well-organised, even a simple linear model on top of them achieves state-of-the-art results. This is the power of good representation learning: if the features are right, the prediction is easy.
+Where your contribution enters
+The limitation of the original Re-IQA quality encoder is that it uses a single ResNet-50 trying to learn one embedding space that covers all distortion types simultaneously. Gaussian noise, blur, JPEG compression, and haze are all very different physical phenomena — they damage images in structurally different ways, at different spatial scales, with different frequency signatures. Asking one network to learn a single manifold that captures all of them is like asking one doctor to be simultaneously an expert in cardiology, neurology, orthopaedics, and oncology. They can be a competent generalist, but they will never match the depth of a specialist.
+What you are proposing is to replace that one generalist encoder with a system that has a shared backbone feeding into four specialist heads, each learning its own ARNIQA-style distortion manifold for its specific noise type. The MoE gating network then blends the specialists intelligently depending on what the image contains. The result is a quality embedding that is simultaneously as broad as the original (handles all distortion types) and as deep as a specialist (understands each type's geometry precisely). That richer embedding then gets concatenated with the unchanged content encoder and fed into the same regressor — but now with a much more informative quality signal, the regressor should produce significantly better scores, especially on images with mixed or unusual distortion types.
+That is the full theory. Want me to now go into the specific mechanics of how ARNIQA's manifold learning works, since that's the piece you're borrowing?
+
+
+The backbone runs once and produces one 2048-dimensional feature vector. All four heads receive the exact same vector. Each head is just two small linear layers — it takes those 2048 shared features and projects them into a 128-dimensional space that is specifically organised for its distortion type. So the backbone is doing the heavy lifting once, and the heads are cheap specialists that reshape that common representation differently. This is both computationally efficient and theoretically sound — the early layers of ResNet learn edges and textures that are genuinely useful for understanding all distortion types.
+python main_contrast_mde.py \
+    --csv_path ./csv_files/moco_train.csv \
+    --model_path ./expt_mde \
+    --batch_size 256 \
+    --learning_rate 6.0 \
+    --epochs 40 \
+    --lambda_triplet 0.5 \
+    --lambda_gate 0.1 \
+    --cosine
+
+the following is unchanged
+python main_contrast.py \
+    --method MoCov2 --cosine --head mlp \
+    --csv_path ./csv_files/moco_train.csv \
+    --model_path ./expt_content \
+    --optimizer LARS \
+    --batch_size 630 --learning_rate 12 --epochs 40
+
+# Your new quality features
+python demo_quality_aware_feats_mde.py \
+    --checkpoint expt_mde/checkpoint_epoch_040.pth \
+    --csv_path csv_files/koniq_test.csv \
+    --output_path features/quality_mde.npy \
+    --show_diagnosis
+
+# Original content features (unchanged)
+python demo_content_aware_feats.py --head mlp
+
+this is also unchanged 
+import numpy as np
+quality = np.load('features/quality_mde.npy')    # (N, 128)  ← your new features
+content = np.load('features/content_feats.npy')  # (N, 2048) ← unchanged
+combined = np.concatenate([quality, content], axis=1)  # (N, 2176)
+# then pass combined into Re-IQA's Ridge regressor training
