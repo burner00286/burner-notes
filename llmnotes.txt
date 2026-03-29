@@ -1,0 +1,1 @@
+this is the file explaining how llms work along with karpathy's tutorial on how to make one 
