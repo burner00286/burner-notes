@@ -1,1 +1,75 @@
 this is the file explaining how llms work along with karpathy's tutorial on how to make one 
+
+## the text file which we are using tiny shakespear which is well know think with shakespears work 
+
+{
+# here are all the unique characters that occur in this text  
+chars = sorted(list(set(text)))                                 
+vocab_size = len(chars)
+print(''.join(chars))
+print(vocab_size)
+}  --> this is the python code which would show us all the characters like ABCD that appear in the text file 
+
+
+{
+stoi = { ch:i for i,ch in enumerate(chars) }
+itos = { i:ch for i,ch in enumerate(chars) }
+encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
+decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
+} --> this is the step where we tokenise the file 
+
+[ as we know essentially we are tokenising everything and then converting all of it into vector and then using those vecotrs to find a series of relations between the desired output and the input so for that we need an encoder and a decoder , the tokenised input will come from the output and then the codes things woould go thourgh the decoder to give us a decoded word as an ouput ]
+
+[tokenizing is a very diverse thing as we can see that soemthing like tiktoken(used by gpt-2) uses soem 50k tokens to tokensize things -- this enables for a more efficient machine which can be used to train models with correct relations and methods ftito(from the input to output) ]
+
+[# Let's now split up the data into train and validation sets
+n = int(0.9*len(data)) # first 90% will be train, rest val
+train_data = data[:n]
+val_data = data[n:] --> this is the part where we differntiate between the training and the validation data 
+
+[ training data is the data we train on and vaidation data is the data with which we validate our data , we use the validation data to sort of tune hyperparameters ]
+this is chatgpt's summary{
+1. Training Data
+
+Training data is the data the model learns from.
+
+The model:
+
+Sees the input
+Makes a prediction
+Compares with the correct answer
+Updates its weights using backpropagation
+
+So this is the data used to fit the model parameters.
+
+Example:
+If you're training a spam classifier:
+
+Input: Email text
+Output: Spam / Not spam
+The model learns patterns from this dataset.
+2. Validation Data
+
+Validation data is the data the model does NOT learn from, but is used to check how well the model is doing during training.
+
+It is used to:
+
+Tune hyperparameters (learning rate, batch size, layers, etc.)
+Detect overfitting
+Decide when to stop training (early stopping)
+
+The model never updates weights using validation data.
+Simple Analogy (Exam Analogy)
+
+Think of it like this:
+
+Type	Analogy
+Training data	Studying from textbook
+Validation data	Solving practice tests
+Test data	Final exam
+}
+
+[ what this transformer does is that it trains by examples -- like for examples in the sequence  (12,34,23,15,46) the transformer will learn like after 12 , 34 comes after 12 and 34 , 23 comes and so on]
+
+
+
