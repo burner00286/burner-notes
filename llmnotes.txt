@@ -71,5 +71,228 @@ Test data	Final exam
 
 [ what this transformer does is that it trains by examples -- like for examples in the sequence  (12,34,23,15,46) the transformer will learn like after 12 , 34 comes after 12 and 34 , 23 comes and so on]
 
+[In transformer training, we choose batch size (B), block size/context length (T), and embedding dimension (C) carefully because block size controls how much context the model can see, embedding size controls how much information the model can store per token, and batch size controls training stability and speed; however, increasing these increases memory and compute cost, especially block size since attention scales as O(T²), so we must balance B, T, and C to fit within GPU memory while still giving the model enough capacity and context to learn effectively.]
 
+[Block size controls memory of the model, embedding size controls intelligence of the model, and batch size controls stability of training — but all three are limited by GPU memory and attention cost O(T²).]
+
+
+{
+torch.manual_seed(1337)
+batch_size = 4 # how many independent sequences will we process in parallel?
+block_size = 8 # what is the maximum context length for predictions?
+
+def get_batch(split):
+    # generate a small batch of data of inputs x and targets y
+    data = train_data if split == 'train' else val_data
+    ix = torch.randint(len(data) - block_size, (batch_size,))
+    x = torch.stack([data[i:i+block_size] for i in ix])
+    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+    return x, y
+
+xb, yb = get_batch('train')
+} --> this is the important part of the code 
+
+{
+[This code randomly samples batch_size number of sequences of length block_size from the dataset to create input x and next-token targets y, so the model can efficiently learn next-word prediction from many different contexts in parallel while keeping computation and memory under control.]
+
+[
+| Part                       | What it does                    | Why it matters                       |
+| -------------------------- | ------------------------------- | ------------------------------------ |
+| `torch.randint(...)`       | Picks random starting positions | Prevents memorization, enables SGD   |
+| `data[i:i+block_size]`     | Creates context                 | Teaches model to use previous tokens |
+| `data[i+1:i+block_size+1]` | Creates targets                 | Next-token prediction                |
+| `torch.stack(...)`         | Makes batch                     | Parallel training on GPU             |
+| `batch_size`               | # sequences at once             | Speed & stable gradients             |
+| `block_size`               | Context length                  | How far model can see                |
+] 
+
+} --> ai summary of the code block 
+
+[ all in all the seed is set so that in the tutorial and our experiments we can get the same output for verufucation , we can remove the seed and still get an outpout albeit a bit different each time and also, this code block is important as we can see how the code intstructs for the transformer to sort of take inputs and makes important headpoits like making sure it doesnt memorise stuff rather learn the patter and the vector space ]
+
+[Cross-entropy loss measures how surprised the model is about the correct next token, and training tries to make the model less surprised by increasing the probability it assigns to the correct token.]
+
+nn is the neural network module in pytorch it has things like layers and loss functions 
+
+{
+import torch
+import torch.nn as nn
+from torch.nn import functional as F
+torch.manual_seed(1337)
+
+class BigramLanguageModel(nn.Module):
+
+    def __init__(self, vocab_size):
+        super().__init__()
+        # each token directly reads off the logits for the next token from a lookup table
+        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+
+    def forward(self, idx, targets=None):
+
+        # idx and targets are both (B,T) tensor of integers
+        logits = self.token_embedding_table(idx) # (B,T,C)
+
+        if targets is None:
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+
+        return logits, loss
+
+    def generate(self, idx, max_new_tokens):
+        # idx is (B, T) array of indices in the current context
+        for _ in range(max_new_tokens):
+            # get the predictions
+            logits, loss = self(idx)
+            # focus only on the last time step
+            logits = logits[:, -1, :] # becomes (B, C)
+            # apply softmax to get probabilities
+            probs = F.softmax(logits, dim=-1) # (B, C)
+            # sample from the distribution
+            idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
+            # append sampled index to the running sequence
+            idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
+        return idx
+
+m = BigramLanguageModel(vocab_size)
+logits, loss = m(xb, yb)
+print(logits.shape)
+print(loss)
+
+print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
+} --> [
+this code has two parts one forward() which is here to compute loss during training 
+and generate() to generate the next word 
+
+self.token_embedding_table = nn.Embedding(vocab_size, vocab_size) 
+here , 
+| Current Token | Next Token Scores                 |
+| ------------- | --------------------------------- |
+| a             | probabilities of all next letters |
+| b             | probabilities of all next letters |
+| c             | probabilities of all next letters |
+
+def forward(self, idx, targets=None):
+here , | Variable | Shape  | Meaning             |
+| -------- | ------ | ------------------- |
+| idx      | (B, T) | Input tokens        |
+| targets  | (B, T) | Correct next tokens |
+
+
+Logits = raw scores output by a model before softmax.
+
+Softmax is a function that converts a list of numbers (logits) into probabilities that add up to 1.
+
+so earlier with this line 
+self.token_embedding_table = nn.Embedding(vocabvocab_size, vocab_size)
+we created a table with rowas and columns of the size 65 
+and each row corresponds to one token 
+after all this essentially 
+
+mathematically, it’s learning:
+
+P(next_token | current_token)
+
+So the embedding table is basically this:
+Current token	Scores for next token
+a	[scores for all tokens]
+b	[scores for all tokens]
+c	[scores for all tokens]
+
+So when you input token 'a', it returns a vector of size vocab_size → logits for next token.
+
+If vocab = {a, b, c}, embedding table might look like:
+
+        next token
+        a    b    c
+a    [ 2.1, 0.3, 1.2 ]
+b    [ 0.5, 3.1, 0.2 ]
+c    [ 1.0, 0.4, 2.2 ]
+^
+current token
+
+So if input = b, model outputs:
+
+[0.5, 3.1, 0.2] → logits
+
+Then softmax → probabilities → predicted next token. 
+
+B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets) here we trying to compute loss 
+
+and mathematically loss = -log(probability_of_correct_token)
+
+now the generate function 
+
+def generate(self, idx, max_new_tokens):
+Input:
+Variable	Meaning
+idx	Starting tokens
+max_new_tokens	How many tokens to generate
+Inside the Loop
+Step 1 — Get predictions
+logits, loss = self(idx)
+
+Model predicts next-token scores for the whole sequence.
+
+Take only last token
+logits = logits[:, -1, :]
+Why?
+Because we only want:
+Prediction for the next token, based on the last token.
+Shape becomes:
+(B, C)
+
+Convert to probabilities
+probs = F.softmax(logits, dim=-1)
+
+Now each row is a probability distribution like:
+
+Token	Probability
+a	0.1
+b	0.05
+c	0.6
+d	0.25
+
+Sample next token
+idx_next = torch.multinomial(probs, num_samples=1)
+
+This randomly picks a token based on probability.
+
+Important:
+
+Not always the highest probability
+This makes text creative, not deterministic
+
+Append to sequence
+idx = torch.cat((idx, idx_next), dim=1)
+
+Sequence grows:
+
+[5] → [5, 20] → [5, 20, 13] → [5, 20, 13, 2] → ...
+
+Loop repeats → text grows.
+
+This Line (Starting Generation)
+decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist())
+
+Let’s break it:
+
+Part	Meaning
+torch.zeros((1,1))	Start with one token (usually newline)
+generate(..., 100)	Generate 100 new tokens
+[0]	Take first sequence
+.tolist()	Convert tensor → list
+decode()	Convert token numbers → characters
+
+So this prints generated text.
+
+Start token → Predict next → Append → Predict next → Append → Predict next → Append ...
+the model looks at the last token, predicts a probability distribution for the next token, randomly samples one token from that distribution, appends it to the sequence, and repeats this to generate text.
+]
 
