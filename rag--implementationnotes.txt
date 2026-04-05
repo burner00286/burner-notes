@@ -1,0 +1,33 @@
+we will learn this in steps 
+Layer 1 → Text Processing
+Layer 2 → Embeddings
+Layer 3 → Vector Search
+Layer 4 → Retrieval
+Layer 5 → LLM + Prompting
+Layer 6 → RAG System Design
+Layer 7 → Backend APIs
+Layer 8 → Frontend
+Layer 9 → Deployment
+
+TEXT PROCESSING 
+cleaning up data and also making it uniform is important first step called text processing 
+Chunks are segments of text that are divided for easier processing, especially when dealing with large documents. 
+this is done for things like context windows and efficiency 
+the strategies used are dependent on things like fixed size or sliding window ( overlaping to preserve context ) and sematic how to divide the text to process it 
+
+EMBEDDING 
+Embeddings are numerical representations of text that capture semantic meaning. They convert words, sentences, or documents into vectors (lists of numbers) 
+that machine learning models can understand.
+"The cat sat on the mat" → [0.2, -0.5, 0.8, 0.1, ..., 0.3]  (768 numbers)
+"A cat is sitting on a rug" → [0.21, -0.48, 0.79, 0.12, ..., 0.32]
+(These are very close vectors because the texts mean similar things)
+
+we make them into vectors cause we can then do things like find the distanc between them and so on 
+there are several embedding models like 
+Model	Dimension	Speed	Quality	Cost	Best For
+MiniLM	384	 Fast	Good	Free	Budget/local projects
+BGE (BAAI)	768	 Fast	Excellent	Free	Production (local)
+OpenAI	1536 Fast	Best	$$	Highest quality needs
+
+we also have a parameter like the dimension we might use the minilm one with 384, 768, 1536 
+The "dimension" is how many numbers represent each piece of text.
